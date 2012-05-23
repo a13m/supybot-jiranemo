@@ -32,6 +32,7 @@ import supybot.ircutils as ircutils
 import supybot.callbacks as callbacks
 
 import pyjira
+from pyjira import types
 from jiranemo import jiracfg
 
 import json
@@ -82,13 +83,26 @@ class Jira(callbacks.Plugin):
         """help for "Jira target"
         """
         proj = key.split('-')[0]
-        v = self.jclient.getVersion(proj, version)
-        self.log.info("Setting target of %s to %s ( %s )" % (key, v.id, v.name))
-        self.jclient.updateIssue(str(key), "Target Version/s", [ v.id ])
-        irc.reply("Set target version for %s to %s ( %s )" % (key, v.id, v.name))
+        versions = [ x for x in self.jclient.restclient.get_versions(proj) if x['name'] in version.split() ]
+        # TODO: ensure all versions are accounted for
+        versionIds = [ x['id'] for x in versions ]
+        self.log.info("Setting target of %s to %s ( %s )" % (key, repr(versionIds), repr(version)))
+        self.jclient.updateIssue(str(key), "Target Version/s", versionIds)
+        irc.reply("Set target version for %s to %s ( %s )" % (key, repr(versionIds), repr(version)))
 
-    target = wrap(target, ['somethingWithoutSpaces', 'somethingWithoutSpaces'])
+    target = wrap(target, ['somethingWithoutSpaces', 'text'])
+
+    def addversion(self, irc, msg, args, proj, name):
+        self.jclient.restclient.add_version(proj, name)
+        irc.replySuccess()
+
+    addversion = wrap(addversion, ['somethingWithoutSpaces', 'somethingWithoutSpaces'])
         
+    def getversions(self, irc, msg, args, proj):
+        irc.reply("Current versions in %s: %s" % (proj, ", ".join([ x['name'] for x in self.jclient.restclient.get_versions(proj) ])))
+
+    getversions = wrap(getversions, ['somethingWithoutSpaces'])
+
     def wf(self, irc, msg, args, key, action):
         actions = [ x['name'] for x in self.jclient.getAvailableActions(key) ]
         if action == "list":
