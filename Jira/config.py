@@ -41,5 +41,14 @@ def configure(advanced):
 
 
 Jira = conf.registerPlugin('Jira')
-conf.registerChannelValue(Jira, 'uri',
+conf.registerChannelValue(Jira, 'enabled',
+        registry.Boolean(False, 'Enable this plugin'))
+conf.registerGlobalValue(Jira, 'uri',
                           registry.String('', "Jira's base URI"))
+conf.registerGlobalValue(Jira, 'username',
+        registry.String('', 'Jira username to use for authentication',
+        private=True))
+conf.registerGlobalValue(Jira, 'password',
+        registry.String('', 'Jira password to use for authentication',
+        private=True))
+

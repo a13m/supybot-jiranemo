@@ -50,7 +50,10 @@ class Jira(callbacks.Plugin):
     @property
     def jclient(self):
         if self._jiraclient is None:
-          cfg = jiracfg.JiraConfiguration(readConfigFiles=True)
+          cfg = jiracfg.JiraConfiguration(readConfigFiles=False)
+          cfg.user = self.registryValue('username')
+          cfg.password = self.registryValue('password')
+          cfg.wsdl = self.registryValue('uri') + "/rpc/soap/jirasoapservice-v2?wsdl"
           authorizer = pyjira.auth.CachingInteractiveAuthorizer(cfg.authCache)
           ccAuthorizer = pyjira.auth.CookieCachingInteractiveAuthorizer(cfg.cookieCache)
           self._jiraclient = pyjira.JiraClient(cfg.wsdl, (cfg.user, cfg.password), 
