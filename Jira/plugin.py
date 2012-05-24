@@ -62,8 +62,9 @@ class Jira(callbacks.Plugin):
         return self._jiraclient
 
     def assign(self, irc, msg, args, key, assignee):
-        """help for "Jira assign"
-        """
+        """<issue> <assignee>
+
+        Assign an issue to someone"""
         self.log.info("Setting assignee of %s to %s" % (key, assignee))
         self.jclient.updateIssue(key, "assignee", assignee)
         irc.reply("Set assignee of %s to %s" % (key, assignee))
@@ -71,8 +72,9 @@ class Jira(callbacks.Plugin):
     assign = wrap(assign, ['somethingWithoutSpaces', 'somethingWithoutSpaces'])
 
     def benefit(self, irc, msg, args, key, b):
-        """help for "Jira benefit"
-        """
+        """<issue> <benefit>
+
+        Set an issue's benefit value"""
         self.log.info("Setting benefit of %s to %s" % (key, b))
         self.jclient.updateIssue(key, "Benefit", b)
         irc.reply("Set assignee of %s to %s" % (key, b))
@@ -80,8 +82,9 @@ class Jira(callbacks.Plugin):
     benefit = wrap(benefit, ['somethingWithoutSpaces', 'somethingWithoutSpaces'])
 
     def target(self, irc, msg, args, key, version):
-        """help for "Jira target"
-        """
+        """<issue> <version>
+
+        Set an issue's target version"""
         proj = key.split('-')[0]
         versions = [ x for x in self.jclient.restclient.get_versions(proj) if x['name'] in version.split() ]
         # TODO: ensure all versions are accounted for
@@ -93,17 +96,26 @@ class Jira(callbacks.Plugin):
     target = wrap(target, ['somethingWithoutSpaces', 'text'])
 
     def addversion(self, irc, msg, args, proj, name):
+        """<project> <version>
+
+        Add a version to a project"""
         self.jclient.restclient.add_version(proj, name)
         irc.replySuccess()
 
     addversion = wrap(addversion, ['somethingWithoutSpaces', 'somethingWithoutSpaces'])
-        
+
     def getversions(self, irc, msg, args, proj):
+        """<project>
+
+        List a project's versions"""
         irc.reply("Current versions in %s: %s" % (proj, ", ".join([ x['name'] for x in self.jclient.restclient.get_versions(proj) ])))
 
     getversions = wrap(getversions, ['somethingWithoutSpaces'])
 
     def wf(self, irc, msg, args, key, action):
+        """<issue> <transition>
+
+        Change an issue's state"""
         actions = [ x['name'] for x in self.jclient.getAvailableActions(key) ]
         if action == "list":
             irc.reply("Available actions: " + ", ".join(actions))
@@ -119,12 +131,11 @@ class Jira(callbacks.Plugin):
             irc.reply("%s now has status '%s'" % ( key, status))
         else:
             irc.reply("workflow action '%s' is ambiguous.  Possible matches: %s" % (action, ", ".join(matches)))
-        
 
     wf = wrap(wf, ['somethingWithoutSpaces', 'text'])
-    
+
     def getissue(self, irc, msg, args, key):
-        """<id>
+        """<issue>
 
         Display information about an issue in Jira along with a link to
         it on the web.
