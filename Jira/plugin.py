@@ -25,6 +25,7 @@
 
 ###
 
+import supybot.dbi as dbi
 import supybot.utils as utils
 from supybot.commands import *
 import supybot.plugins as plugins
@@ -39,14 +40,33 @@ import json
 import urllib2
 from urlparse import urljoin
 
+class IssueRecord(dbi.Record):
+    __fields__ = [
+        ('issuekey', eval),
+        ]
+
+class DbiJiraDB(plugins.DbiChannelDB):
+    class DB(dbi.DB):
+        Record = IssueRecord
+        def set(self, id, issuekey):
+            record = self.Record(issuekey=issuekey)
+            super(self.__class__, self).set(1, record)
+        def get(self, id=1):
+            try:
+                return super(self.__class__, self).get(id)
+            except:
+                return self.Record(issuekey='')
+
+JIRADB = plugins.DB('JIRA', {'flat': DbiJiraDB})
+
 class Jira(callbacks.Plugin):
-    """Add the help for "@plugin help Jira" here
-    This should describe *how* to use this plugin."""
+    """This is a plugin for controlling a Jira instance."""
     threaded = True
     _jiraclient = None
 
     def __init__(self, irc):
         super(self.__class__, self).__init__(irc)
+        self.db = JIRADB()
 
     @property
     def jclient(self):
@@ -64,27 +84,52 @@ class Jira(callbacks.Plugin):
     def assign(self, irc, msg, args, key, assignee):
         """<issue> <assignee>
 
-        Assign an issue to someone"""
+        Assign an issue to a user (NOTE: this requires their jira username, not their IRC nick!)"""
+
+        if key == '.':
+            key = self.db.get(msg.args[0], 1).issuekey
+            if not key:
+                irc.reply("No previous issue found")
+                return
+        self.db.set(msg.args[0], 1, key)
+
         self.log.info("Setting assignee of %s to %s" % (key, assignee))
         self.jclient.updateIssue(key, "assignee", assignee)
-        irc.reply("Set assignee of %s to %s" % (key, assignee))
+        irc.replySuccess()
 
     assign = wrap(assign, ['somethingWithoutSpaces', 'somethingWithoutSpaces'])
 
     def benefit(self, irc, msg, args, key, b):
-        """<issue> <benefit>
+        """<issue> [ Low | Medium | High ]
 
-        Set an issue's benefit value"""
+        Specify the Benefit for an issue (NOTE: this is a Euca-specific custom field)"""
+
+        if key == '.':
+            key = self.db.get(msg.args[0], 1).issuekey
+            if not key:
+                irc.reply("No previous issue found")
+                return
+        self.db.set(msg.args[0], 1, key)
+
         self.log.info("Setting benefit of %s to %s" % (key, b))
         self.jclient.updateIssue(key, "Benefit", b)
-        irc.reply("Set assignee of %s to %s" % (key, b))
+        irc.replySuccess()
 
     benefit = wrap(benefit, ['somethingWithoutSpaces', 'somethingWithoutSpaces'])
 
     def target(self, irc, msg, args, key, version):
-        """<issue> <version>
+        """<issue> <version> ...
 
-        Set an issue's target version"""
+        Specify the target version(s) for an issue, separated by spaces.
+        (NOTE: this is a Euca-specific custom field)"""
+
+        if key == '.':
+            key = self.db.get(msg.args[0], 1).issuekey
+            if not key:
+                irc.reply("No previous issue found")
+                return
+        self.db.set(msg.args[0], 1, key)
+
         proj = key.split('-')[0]
         versions = [ x for x in self.jclient.restclient.get_versions(proj) if x['name'] in version.split() ]
         # TODO: ensure all versions are accounted for
@@ -96,32 +141,52 @@ class Jira(callbacks.Plugin):
     target = wrap(target, ['somethingWithoutSpaces', 'text'])
 
     def addversion(self, irc, msg, args, proj, name):
-        """<project> <version>
+        """<projectKey> <version>
 
         Add a version to a project"""
+
         self.jclient.restclient.add_version(proj, name)
         irc.replySuccess()
 
     addversion = wrap(addversion, ['somethingWithoutSpaces', 'somethingWithoutSpaces'])
 
+    def current(self, irc, msg, args):
+        key = self.db.get(msg.args[0], 1).issuekey
+        if not key:
+            irc.reply("No previous issue found")
+            return
+        irc.reply("Current issue is " + key)
+
+    current = wrap(current, [])
+
     def getversions(self, irc, msg, args, proj):
-        """<project>
+        """<projectKey>
 
         List a project's versions"""
+
         irc.reply("Current versions in %s: %s" % (proj, ", ".join([ x['name'] for x in self.jclient.restclient.get_versions(proj) ])))
 
     getversions = wrap(getversions, ['somethingWithoutSpaces'])
 
     def wf(self, irc, msg, args, key, action):
-        """<issue> <transition>
+        """<issue>  [ <transition> | list ]
 
-        Change an issue's state"""
+        list: List the valid actions from this state
+        <transition>: Perform the specified action.  Abbreviations are allowed and are case insensitive."""
+
+        if key == '.':
+            key = self.db.get(msg.args[0], 1).issuekey
+            if not key:
+                irc.reply("No previous issue found")
+                return
+        self.db.set(msg.args[0], 1, key)
+
         actions = [ x['name'] for x in self.jclient.getAvailableActions(key) ]
         if action == "list":
             irc.reply("Available actions: " + ", ".join(actions))
             return
 
-        matches = [ x for x in actions if x.lower().startswith(action) ]
+        matches = [ x for x in actions if x.lower().startswith(action.lower()) ]
         if len(matches) == 0:
             irc.reply("No matching actions.  Possible actions: ", ", ".join(actions))
         if len(matches) == 1:
@@ -138,8 +203,9 @@ class Jira(callbacks.Plugin):
         """<issue>
 
         Display information about an issue in Jira along with a link to
-        it on the web.
-        """
+        it on the web."""
+
+        self.db.set(msg.args[0], 1, key)
         try:
             response_json = self.jclient.restclient.get_issue(key)
         except urllib2.HTTPError as e:
